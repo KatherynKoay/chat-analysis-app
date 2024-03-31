@@ -2,6 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
 const router = express.Router();
+const analyzeChatLog = require("./analyzeChatLog"); // Import the script for analyzing chat log
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -14,34 +15,40 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-router.post("/upload", upload.single("file"), (req, res) => {
+router.post("/upload", upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.status(400).send("No file uploaded");
   }
 
-  fs.readFile(req.file.path, "utf8", (err, data) => {
-    if (err) {
-      console.error("Error reading file:", err);
-      return res.status(500).send("Error reading file");
-    }
+  try {
+    fs.readFile(req.file.path, "utf8", (err, data) => {
+      if (err) {
+        console.error("Error reading file:", err);
+        return res.status(500).send("Error reading file");
+      }
 
-    const wordCounts = {};
-    const lines = data.split("\n");
-    lines.forEach((line) => {
-      const words = line.split(" ");
-      const username = words[0];
-      wordCounts[username] = (wordCounts[username] || 0) + words.length;
+      const wordCounts = {};
+      const lines = data.split("\n");
+      lines.forEach((line) => {
+        const words = line.split(" ");
+        const username = words[0];
+        wordCounts[username] = (wordCounts[username] || 0) + words.length;
+      });
+
+      // Find the chattiest user
+      let chattiestUser = { username: "", count: 0 };
+      for (const [username, count] of Object.entries(wordCounts)) {
+        if (count > chattiestUser.count) {
+          chattiestUser = { username, count };
+        }
+      }
+
+      res.json(chattiestUser);
     });
-
-    const users = Object.keys(wordCounts).map((username) => ({
-      username,
-      count: wordCounts[username],
-    }));
-
-    users.sort((a, b) => b.count - a.count);
-
-    res.json(users);
-  });
+  } catch (error) {
+    console.error("Error processing file:", error);
+    res.status(500).send("Error processing file");
+  }
 });
 
 module.exports = router;
